@@ -1,0 +1,2 @@
+﻿rank,maxIter,regParam,topN,rmse,coverage,diversity,popular_recommendation_ratio,trained_at
+10,8,0.08,8,2.3978,0.0425,3.381,0.5208,2026-07-08 21:30:21
