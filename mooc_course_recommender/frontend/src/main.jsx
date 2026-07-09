@@ -30,9 +30,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:800
 const COLORS = ["#2563eb", "#16a34a", "#f97316", "#7c3aed", "#0891b2", "#db2777", "#64748b", "#ca8a04"];
 
 async function apiGet(path) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { "ngrok-skip-browser-warning": "true" },
-  });
+  const response = await fetch(`${API_BASE_URL}${path}`);
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.detail || `请求失败：${response.status}`);
@@ -45,7 +43,6 @@ async function apiPost(path, body) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "ngrok-skip-browser-warning": "true",
     },
     body: JSON.stringify(body),
   });

@@ -27,8 +27,7 @@ def cors_origins() -> list[str]:
     configured = os.getenv("CORS_ALLOW_ORIGINS", "")
     origins = [origin.strip() for origin in configured.split(",") if origin.strip()]
     return origins or [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
+        "*",
     ]
 
 
