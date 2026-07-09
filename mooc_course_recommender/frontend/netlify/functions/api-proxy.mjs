@@ -1,8 +1,13 @@
-const API_BASE_URL = (process.env.VITE_API_BASE_URL || process.env.API_BASE_URL || "").replace(/\/$/, "");
+const API_BASE_URL = (
+  process.env.BACKEND_API_BASE_URL ||
+  process.env.API_BASE_URL ||
+  process.env.VITE_API_BASE_URL ||
+  ""
+).replace(/\/$/, "");
 
 export default async (request) => {
   if (!API_BASE_URL) {
-    return Response.json({ detail: "Missing VITE_API_BASE_URL" }, { status: 500 });
+    return Response.json({ detail: "Missing API_BASE_URL" }, { status: 500 });
   }
 
   const incomingUrl = new URL(request.url);

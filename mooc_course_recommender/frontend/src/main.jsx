@@ -26,7 +26,7 @@ import {
 } from "recharts";
 import "./styles.css";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+const API_BASE_URL = (import.meta.env.VITE_DIRECT_API_BASE_URL || "").replace(/\/$/, "");
 const COLORS = ["#2563eb", "#16a34a", "#f97316", "#7c3aed", "#0891b2", "#db2777", "#64748b", "#ca8a04"];
 
 function apiUrl(path) {

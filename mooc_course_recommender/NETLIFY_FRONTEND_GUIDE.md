@@ -77,10 +77,10 @@ publish = "dist"
 command = "npm run build"
 ```
 
-在 Netlify 项目的 Environment variables 里添加。这个变量现在给 Netlify 代理函数使用，前端浏览器默认访问同域 `/api`：
+在 Netlify 项目的 Environment variables 里添加。这个变量给 Netlify 代理函数使用，前端浏览器默认访问同域 `/api`：
 
 ```text
-VITE_API_BASE_URL=https://你的后端公网地址
+API_BASE_URL=https://你的后端公网地址
 ```
 
 然后重新部署。
@@ -90,5 +90,5 @@ VITE_API_BASE_URL=https://你的后端公网地址
 - Netlify 只托管 `frontend` 静态页面。
 - `frontend/netlify/functions/api-proxy.mjs` 会代理 `/api/*` 请求，并自动添加 `ngrok-skip-browser-warning` header，避免 ngrok 免费版 warning 页拦截浏览器 fetch。
 - 本机后端、Java/Spark 环境、ngrok/cpolar 隧道必须保持运行。
-- 如果隧道地址变了，需要更新 Netlify 环境变量 `VITE_API_BASE_URL` 并重新部署。
+- 如果隧道地址变了，需要更新 Netlify 环境变量 `API_BASE_URL` 并重新部署。
 - 原 Streamlit 仍然可以用：`streamlit run app.py`。
