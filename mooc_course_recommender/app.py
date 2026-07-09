@@ -137,6 +137,55 @@ def metric_card(label: str, value) -> None:
     st.metric(label, value if value is not None else "-")
 
 
+def format_percent(value) -> str:
+    if value is None or pd.isna(value):
+        return "-"
+    return f"{float(value) * 100:.2f}%"
+
+
+def format_metric_table(metrics: pd.DataFrame) -> pd.DataFrame:
+    display = metrics.copy()
+    if "coverage" in display.columns:
+        display["coverage"] = display["coverage"].apply(format_percent)
+    if "popular_recommendation_ratio" in display.columns:
+        display["popular_recommendation_ratio"] = display["popular_recommendation_ratio"].apply(format_percent)
+    return display
+
+
+def group_categories_below_social(data: pd.DataFrame, value_col: str) -> pd.DataFrame:
+    if data.empty or "category" not in data.columns or value_col not in data.columns:
+        return data
+
+    threshold_rows = data[data["category"] == "社会学"]
+    if threshold_rows.empty:
+        return data
+
+    threshold = threshold_rows[value_col].max()
+    display = data.copy()
+    display["category_display"] = display["category"].where(display[value_col] >= threshold, "其他")
+    return (
+        display.groupby("category_display", as_index=False)[value_col]
+        .sum()
+        .sort_values(value_col, ascending=False)
+    )
+
+
+def recommendation_score_bar(data: pd.DataFrame, title: str):
+    chart_data = data.sort_values("recommendation_score", ascending=True)
+    course_order = chart_data["course_name"].tolist()
+    fig = px.bar(
+        chart_data,
+        x="recommendation_score",
+        y="course_name",
+        color="category",
+        orientation="h",
+        title=title,
+        category_orders={"course_name": course_order},
+    )
+    fig.update_yaxes(categoryorder="array", categoryarray=course_order)
+    return fig
+
+
 def overview_page() -> None:
     st.subheader("数据概览")
     if not require_processed_data():
@@ -170,9 +219,10 @@ def overview_page() -> None:
         )
         st.plotly_chart(fig, use_container_width=True)
     with col2:
+        category_pie = group_categories_below_social(category_distribution, "interaction_count")
         fig = px.pie(
-            category_distribution,
-            names="category",
+            category_pie,
+            names="category_display" if "category_display" in category_pie.columns else "category",
             values="interaction_count",
             title="课程类别交互分布",
             hole=0.35,
@@ -223,10 +273,10 @@ def training_page() -> None:
         cols = st.columns(4)
         latest = latest_metrics.iloc[0]
         cols[0].metric("RMSE", latest.get("rmse", "-"))
-        cols[1].metric("覆盖率", latest.get("coverage", "-"))
+        cols[1].metric("覆盖率", format_percent(latest.get("coverage")))
         cols[2].metric("多样性", latest.get("diversity", "-"))
-        cols[3].metric("热门推荐占比", latest.get("popular_recommendation_ratio", "-"))
-        st.dataframe(latest_metrics, use_container_width=True)
+        cols[3].metric("热门推荐占比", format_percent(latest.get("popular_recommendation_ratio")))
+        st.dataframe(format_metric_table(latest_metrics), use_container_width=True)
 
 
 def recommendation_page() -> None:
@@ -260,18 +310,18 @@ def recommendation_page() -> None:
 
         col3, col4 = st.columns(2)
         with col3:
-            fig = px.bar(
-                user_recs.sort_values("recommendation_score", ascending=True),
-                x="recommendation_score",
-                y="course_name",
-                color="category",
-                orientation="h",
-                title=f"{user_id} 推荐分数",
-            )
+            fig = recommendation_score_bar(user_recs, f"{user_id} 推荐分数")
             st.plotly_chart(fig, use_container_width=True)
         with col4:
             category_counts = user_recs.groupby("category", as_index=False).size()
-            fig = px.pie(category_counts, names="category", values="size", title="推荐课程类别分布", hole=0.35)
+            category_pie = group_categories_below_social(category_counts, "size")
+            fig = px.pie(
+                category_pie,
+                names="category_display" if "category_display" in category_pie.columns else "category",
+                values="size",
+                title="推荐课程类别分布",
+                hole=0.35,
+            )
             st.plotly_chart(fig, use_container_width=True)
         return
 
@@ -309,18 +359,18 @@ def recommendation_page() -> None:
 
     col3, col4 = st.columns(2)
     with col3:
-        fig = px.bar(
-            course_recs.sort_values("recommendation_score", ascending=True),
-            x="recommendation_score",
-            y="course_name",
-            color="category",
-            orientation="h",
-            title="基于已学课程的协同过滤推荐分数",
-        )
+        fig = recommendation_score_bar(course_recs, "基于已学课程的协同过滤推荐分数")
         st.plotly_chart(fig, use_container_width=True)
     with col4:
         category_counts = course_recs.groupby("category", as_index=False).size()
-        fig = px.pie(category_counts, names="category", values="size", title="推荐课程类别分布", hole=0.35)
+        category_pie = group_categories_below_social(category_counts, "size")
+        fig = px.pie(
+            category_pie,
+            names="category_display" if "category_display" in category_pie.columns else "category",
+            values="size",
+            title="推荐课程类别分布",
+            hole=0.35,
+        )
         st.plotly_chart(fig, use_container_width=True)
 
 
@@ -332,10 +382,23 @@ def analysis_page() -> None:
     history = read_table(str(OUTPUT_DIR), "metrics_history")
     recommendations = read_table(str(OUTPUT_DIR), "recommendations")
     popular_courses = read_table(str(PROCESSED_DIR), "popular_courses")
+    courses = read_table(str(PROCESSED_DIR), "courses_clean")
 
     if not history.empty:
+        latest = history.sort_values("trained_at", ascending=False).iloc[0]
+        total_course_count = courses["course_id"].nunique() if not courses.empty else 0
+        recommended_course_count = recommendations["course_id"].nunique() if not recommendations.empty else 0
+        avg_recommend_count = len(recommendations) / recommended_course_count if recommended_course_count else 0
+
+        st.markdown("#### 最新推荐效果")
+        cols = st.columns(4)
+        cols[0].metric("推荐覆盖课程", f"{recommended_course_count} / {total_course_count}")
+        cols[1].metric("覆盖率", format_percent(latest.get("coverage")))
+        cols[2].metric("热门推荐占比", format_percent(latest.get("popular_recommendation_ratio")))
+        cols[3].metric("单门推荐平均出现", f"{avg_recommend_count:.1f} 次" if avg_recommend_count else "-")
+
         st.markdown("#### 参数组合指标对比")
-        st.dataframe(history, use_container_width=True)
+        st.dataframe(format_metric_table(history), use_container_width=True)
         fig = px.scatter(
             history,
             x="rank",
