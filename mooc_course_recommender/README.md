@@ -112,6 +112,8 @@ python run_pipeline.py
 streamlit run app.py
 ```
 
+也可以使用新增的前后端分离展示方式：`frontend/` 部署到 Netlify，`backend/` 在本机运行 FastAPI，并通过 ngrok/cpolar 暴露公网 HTTPS 地址。详细步骤见 `NETLIFY_FRONTEND_GUIDE.md`。
+
 ## 系统功能说明
 
 ### 数据接入
