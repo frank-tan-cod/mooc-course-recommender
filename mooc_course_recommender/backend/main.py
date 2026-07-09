@@ -1,6 +1,9 @@
 import os
 import sys
 import math
+import json
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +26,16 @@ class TrainRequest(BaseModel):
     max_iter: int = Field(DEFAULT_MAX_ITER, ge=3, le=30)
     reg_param: float = Field(DEFAULT_REG_PARAM, ge=0.001, le=1.0)
     top_n: int = Field(DEFAULT_TOP_N, ge=3, le=30)
+
+
+class AiMessage(BaseModel):
+    role: str = Field(..., pattern="^(user|assistant)$")
+    content: str = Field(..., min_length=1, max_length=8000)
+
+
+class AiChatRequest(BaseModel):
+    messages: list[AiMessage] = Field(..., min_length=1, max_length=20)
+    context: dict[str, Any] | None = None
 
 
 def cors_origins() -> list[str]:
@@ -84,6 +97,107 @@ def require_table(base_dir: Path, name: str) -> pd.DataFrame:
     if df.empty:
         raise HTTPException(status_code=404, detail=f"Missing or empty table: {name}")
     return df
+
+
+def read_deepseek_api_key() -> str:
+    key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if key:
+        return key
+
+    for path in [PROJECT_ROOT / "api_key", PROJECT_ROOT.parent / "api_key"]:
+        if path.exists():
+            return path.read_text(encoding="utf-8").strip()
+
+    raise HTTPException(status_code=500, detail="Missing DeepSeek API key. Put it in api_key or set DEEPSEEK_API_KEY.")
+
+
+def course_rows_by_ids(course_ids: list[str]) -> list[dict[str, Any]]:
+    if not course_ids:
+        return []
+    courses = read_table(PROJECT_ROOT / "data" / "raw", "courses")
+    if courses.empty:
+        courses = read_table(PROCESSED_DIR, "courses_clean")
+    if courses.empty or "course_id" not in courses.columns:
+        return []
+
+    unique_ids = list(dict.fromkeys([course_id for course_id in course_ids if course_id]))
+    matched = courses[courses["course_id"].isin(unique_ids)].drop_duplicates("course_id")
+    lookup = {row["course_id"]: row for row in records(matched)}
+    return [lookup[course_id] for course_id in unique_ids if course_id in lookup]
+
+
+def format_course_context(context: dict[str, Any] | None) -> str:
+    if not context:
+        return ""
+
+    selected_ids = context.get("selected_course_ids") or []
+    recommended_id = context.get("recommended_course_id")
+    selected_courses = course_rows_by_ids(selected_ids)
+    recommended_courses = course_rows_by_ids([recommended_id] if recommended_id else [])
+
+    lines = ["## 推荐解释上下文"]
+    if recommended_courses:
+        course = recommended_courses[0]
+        lines.extend(
+            [
+                f"- 推荐课程：{course.get('course_name') or context.get('recommended_course_name') or recommended_id}",
+                f"- 课程ID：{course.get('course_id') or recommended_id}",
+                f"- 类别：{course.get('category') or '未分类'}",
+                f"- 教师/来源：{course.get('teacher') or '未知'}",
+                f"- 课程简介：{course.get('description') or '暂无简介'}",
+            ]
+        )
+    elif recommended_id or context.get("recommended_course_name"):
+        lines.append(f"- 推荐课程：{context.get('recommended_course_name') or recommended_id}")
+
+    if context.get("recommendation_score") is not None:
+        lines.append(f"- 推荐分数：{context.get('recommendation_score')}")
+
+    if selected_courses:
+        lines.append("- 已选择/已学习课程：")
+        for course in selected_courses[:12]:
+            lines.append(
+                "  - "
+                f"{course.get('course_name') or course.get('course_id')} "
+                f"（{course.get('category') or '未分类'}）："
+                f"{course.get('description') or '暂无简介'}"
+            )
+
+    return "\n".join(lines)
+
+
+def call_deepseek(messages: list[dict[str, str]]) -> str:
+    api_key = read_deepseek_api_key()
+    base_url = os.getenv("DEEPSEEK_API_BASE_URL", "https://api.deepseek.com").strip().rstrip("/")
+    model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat").strip() or "deepseek-chat"
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.65,
+        "max_tokens": 1400,
+    }
+    request = urllib.request.Request(
+        f"{base_url}/chat/completions",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore") or str(exc)
+        raise HTTPException(status_code=502, detail=f"DeepSeek API error: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise HTTPException(status_code=502, detail=f"Cannot reach DeepSeek API: {exc.reason}") from exc
+
+    try:
+        return data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise HTTPException(status_code=502, detail="DeepSeek API returned an unexpected response") from exc
 
 
 def histogram(df: pd.DataFrame, column: str, bins: int = 12) -> list[dict[str, Any]]:
@@ -316,6 +430,24 @@ def recommendations_by_courses(
     if recs.empty:
         raise HTTPException(status_code=404, detail="No recommendations for selected courses")
     return {"items": records(recs)}
+
+
+@app.post("/api/ai/chat")
+def ai_chat(request: AiChatRequest) -> dict[str, Any]:
+    context_text = format_course_context(request.context)
+    system_prompt = (
+        "你是 MOOC 课程推荐系统中的 AI 学业顾问。"
+        "回答必须使用中文 Markdown，结构清晰、语气积极、有说服力。"
+        "解释课程时要优先依据课程 description，不要编造没有依据的事实。"
+        "如果存在推荐上下文，请结合已选择课程、推荐课程和推荐分数，说明这门课讲什么、为什么适合继续学习、能带来什么学习收益。"
+        "不要说自己无法访问外部系统；只基于用户提供和系统上下文回答。"
+    )
+    messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    if context_text:
+        messages.append({"role": "system", "content": context_text})
+    messages.extend([message.model_dump() for message in request.messages])
+    answer = call_deepseek(messages)
+    return {"content": answer}
 
 
 @app.get("/api/analysis")
