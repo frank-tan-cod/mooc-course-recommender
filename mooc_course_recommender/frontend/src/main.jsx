@@ -19,8 +19,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -865,10 +863,64 @@ function categoryRows(items) {
   return Array.from(map.entries()).map(([category, count]) => ({ category, count }));
 }
 
+function buildAnalysisSummary(data) {
+  const latest = data.latest || {};
+  const summary = data.summary || {};
+  const hotCourse = data.hot_recommendations?.[0];
+  const popularCourse = data.popular_courses?.[0];
+  const coverageText = formatPercent(latest.coverage);
+  const popularRatioText = formatPercent(latest.popular_recommendation_ratio);
+  const diversityText = latest.diversity ?? "-";
+  const rmseText = latest.rmse ?? "-";
+  const topN = latest.topN ?? latest.top_n ?? "-";
+  const recommendedCourseCount = Number(summary.recommended_course_count || 0);
+  const totalCourseCount = Number(summary.total_course_count || 0);
+  const avgRecommendCount = summary.avg_recommend_count ?? "-";
+
+  const cards = [
+    {
+      label: "训练参数",
+      value: `rank ${latest.rank ?? "-"} / iter ${latest.maxIter ?? latest.max_iter ?? "-"}`,
+      detail: `regParam ${latest.regParam ?? latest.reg_param ?? "-"}，Top-N ${topN}`,
+    },
+    {
+      label: "模型效果",
+      value: `RMSE ${rmseText}`,
+      detail: `覆盖率 ${coverageText}，多样性 ${diversityText}`,
+    },
+    {
+      label: "推荐规模",
+      value: `${formatNumber(recommendedCourseCount)} / ${formatNumber(totalCourseCount)}`,
+      detail: `单门课程平均进入推荐 ${avgRecommendCount} 次`,
+    },
+    {
+      label: "集中程度",
+      value: popularRatioText,
+      detail: "热门推荐占比，用于观察结果是否过度集中",
+    },
+  ];
+
+  const notes = [
+    `本次 ALS 模型使用 ${formatNumber(topN)} 个推荐位生成个性化课程列表，推荐结果覆盖 ${formatNumber(recommendedCourseCount)} 门课程，占全部课程的 ${coverageText}。`,
+    `RMSE 为 ${rmseText}，推荐列表平均覆盖 ${diversityText} 个课程类别，说明系统不仅输出推荐分数，也保留了类别多样性分析能力。`,
+    `热门推荐占比为 ${popularRatioText}，可用于判断推荐结果是否偏向少数热门课程；该指标越高，说明推荐集中度越明显。`,
+  ];
+
+  if (hotCourse) {
+    notes.push(`本次推荐结果中出现最多的课程是“${hotCourse.course_name || hotCourse.course_id}”，共进入推荐列表 ${formatNumber(hotCourse.size)} 次。`);
+  }
+  if (popularCourse) {
+    notes.push(`原始交互中最热门的课程是“${popularCourse.course_name || popularCourse.course_id}”，学习次数为 ${formatNumber(popularCourse.learn_count)}，可与推荐高频课程进行对比。`);
+  }
+
+  return { cards, notes, trainedAt: latest.trained_at };
+}
+
 function Analysis() {
   const { data, loading, error } = useApi("/api/analysis", []);
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
+  const analysisSummary = buildAnalysisSummary(data);
 
   return (
     <>
@@ -878,17 +930,25 @@ function Analysis() {
         <Metric label="热门推荐占比" value={formatPercent(data.latest.popular_recommendation_ratio)} tone="orange" />
         <Metric label="单门推荐平均出现" value={`${data.summary.avg_recommend_count} 次`} tone="purple" />
       </div>
-      <Section title="参数组合指标对比" icon={Activity}>
-        <ResponsiveContainer width="100%" height={320}>
-          <LineChart data={[...data.history].reverse()}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="trained_at" tick={{ fontSize: 11 }} />
-            <YAxis />
-            <Tooltip />
-            <Line type="monotone" dataKey="rmse" stroke="#2563eb" strokeWidth={2} />
-            <Line type="monotone" dataKey="coverage" stroke="#16a34a" strokeWidth={2} />
-          </LineChart>
-        </ResponsiveContainer>
+      <Section
+        title="本次训练与推荐总结"
+        icon={Sparkles}
+        actions={analysisSummary.trainedAt && <span className="section-meta">训练时间：{analysisSummary.trainedAt}</span>}
+      >
+        <div className="analysis-summary-grid">
+          {analysisSummary.cards.map((item) => (
+            <div className="analysis-summary-card" key={item.label}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <small>{item.detail}</small>
+            </div>
+          ))}
+        </div>
+        <div className="analysis-notes">
+          {analysisSummary.notes.map((note, index) => (
+            <p key={index}>{note}</p>
+          ))}
+        </div>
       </Section>
       <div className="chart-grid">
         <Section title="推荐结果中出现最多的课程" icon={BarChart3}>
