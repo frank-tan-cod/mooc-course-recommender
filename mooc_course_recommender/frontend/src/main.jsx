@@ -196,6 +196,30 @@ function CategoryLegend({ rows, valueKey }) {
   );
 }
 
+function focusHistogramRows(rows, visibleCount = 6) {
+  const safeRows = rows || [];
+  return {
+    visible: safeRows.slice(0, visibleCount),
+    hidden: safeRows.slice(visibleCount),
+  };
+}
+
+function HistogramTailNote({ rows }) {
+  if (!rows.length) return null;
+
+  const total = rows.reduce((sum, row) => sum + Number(row.count || 0), 0);
+  const firstRange = rows[0]?.range;
+  const lastRange = rows[rows.length - 1]?.range;
+
+  return (
+    <div className="tail-note">
+      <span>右侧长尾已从主图隐藏</span>
+      <strong>{formatNumber(total)}</strong>
+      <span>{firstRange === lastRange ? firstRange : `${firstRange} 至 ${lastRange}`}</span>
+    </div>
+  );
+}
+
 function Overview() {
   const { data, loading, error } = useApi("/api/overview", []);
   if (loading) return <LoadingBlock />;
@@ -203,6 +227,8 @@ function Overview() {
 
   const summary = data.summary || {};
   const categoryDistribution = data.category_distribution || [];
+  const userCourseHistogram = focusHistogramRows(data.user_course_histogram);
+  const courseLearnHistogram = focusHistogramRows(data.course_learn_histogram);
   return (
     <>
       <div className="metrics-grid">
@@ -254,25 +280,27 @@ function Overview() {
       <div className="chart-grid">
         <Section title="用户选课数量分布" icon={Activity}>
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={data.user_course_histogram}>
+            <BarChart data={userCourseHistogram.visible}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="range" tick={{ fontSize: 11 }} />
+              <XAxis dataKey="range" interval={0} tick={{ fontSize: 11 }} />
               <YAxis />
               <Tooltip />
               <Bar dataKey="count" fill="#2563eb" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+          <HistogramTailNote rows={userCourseHistogram.hidden} />
         </Section>
         <Section title="课程被学习次数分布" icon={Activity}>
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={data.course_learn_histogram}>
+            <BarChart data={courseLearnHistogram.visible}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="range" tick={{ fontSize: 11 }} />
+              <XAxis dataKey="range" interval={0} tick={{ fontSize: 11 }} />
               <YAxis />
               <Tooltip />
               <Bar dataKey="count" fill="#16a34a" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+          <HistogramTailNote rows={courseLearnHistogram.hidden} />
         </Section>
       </div>
     </>
