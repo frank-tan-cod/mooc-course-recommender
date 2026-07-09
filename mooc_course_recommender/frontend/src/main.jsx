@@ -514,7 +514,16 @@ function App() {
     { id: "analysis", label: "结果分析", icon: Activity, component: <Analysis /> },
   ];
   const [active, setActive] = useState("overview");
+  const [visitedTabs, setVisitedTabs] = useState(() => new Set(["overview"]));
   const current = tabs.find((tab) => tab.id === active) || tabs[0];
+
+  function showTab(id) {
+    setActive(id);
+    setVisitedTabs((currentTabs) => {
+      if (currentTabs.has(id)) return currentTabs;
+      return new Set([...currentTabs, id]);
+    });
+  }
 
   return (
     <div className="app">
@@ -528,7 +537,7 @@ function App() {
         </div>
         <nav>
           {tabs.map((tab) => (
-            <button key={tab.id} className={active === tab.id ? "active" : ""} onClick={() => setActive(tab.id)}>
+            <button key={tab.id} className={active === tab.id ? "active" : ""} onClick={() => showTab(tab.id)}>
               <tab.icon size={18} />
               {tab.label}
             </button>
@@ -546,7 +555,13 @@ function App() {
             <p>基于 Spark ALS 的课程协同过滤推荐系统</p>
           </div>
         </header>
-        {current.component}
+        {tabs.map((tab) =>
+          visitedTabs.has(tab.id) ? (
+            <div key={tab.id} className={active === tab.id ? "page-panel active" : "page-panel"} aria-hidden={active !== tab.id}>
+              {tab.component}
+            </div>
+          ) : null,
+        )}
       </main>
     </div>
   );
