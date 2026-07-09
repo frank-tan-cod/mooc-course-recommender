@@ -3,6 +3,9 @@ base = "frontend"
 publish = "dist"
 command = "npm run build"
 
+[functions]
+directory = "netlify/functions"
+
 [[redirects]]
 from = "/*"
 to = "/index.html"

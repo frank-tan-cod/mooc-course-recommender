@@ -26,11 +26,16 @@ import {
 } from "recharts";
 import "./styles.css";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 const COLORS = ["#2563eb", "#16a34a", "#f97316", "#7c3aed", "#0891b2", "#db2777", "#64748b", "#ca8a04"];
 
+function apiUrl(path) {
+  if (!API_BASE_URL) return path;
+  return `${API_BASE_URL}${path}`;
+}
+
 async function apiGet(path) {
-  const response = await fetch(`${API_BASE_URL}${path}`);
+  const response = await fetch(apiUrl(path));
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.detail || `请求失败：${response.status}`);
@@ -39,7 +44,7 @@ async function apiGet(path) {
 }
 
 async function apiPost(path, body) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(apiUrl(path), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -531,7 +536,7 @@ function App() {
         </nav>
         <div className="api-box">
           <span>API</span>
-          <code>{API_BASE_URL}</code>
+          <code>{API_BASE_URL || "/api"}</code>
         </div>
       </aside>
       <main>
