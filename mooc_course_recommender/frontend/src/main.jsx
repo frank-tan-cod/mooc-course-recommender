@@ -27,7 +27,36 @@ import {
 import "./styles.css";
 
 const API_BASE_URL = (import.meta.env.VITE_DIRECT_API_BASE_URL || "").replace(/\/$/, "");
-const COLORS = ["#2563eb", "#16a34a", "#f97316", "#7c3aed", "#0891b2", "#db2777", "#64748b", "#ca8a04"];
+const COLORS = [
+  "#2563eb",
+  "#16a34a",
+  "#f97316",
+  "#7c3aed",
+  "#0891b2",
+  "#db2777",
+  "#64748b",
+  "#ca8a04",
+  "#0f766e",
+  "#dc2626",
+  "#4f46e5",
+  "#65a30d",
+  "#c026d3",
+  "#ea580c",
+  "#0284c7",
+  "#be123c",
+  "#9333ea",
+  "#059669",
+  "#b45309",
+  "#475569",
+  "#1d4ed8",
+  "#15803d",
+  "#e11d48",
+  "#7e22ce",
+];
+
+function colorAt(index) {
+  return COLORS[index % COLORS.length];
+}
 
 function apiUrl(path) {
   if (!API_BASE_URL) return path;
@@ -134,12 +163,46 @@ function Section({ title, icon: Icon, children, actions }) {
   );
 }
 
+function PieLabel({ cx, cy, midAngle, outerRadius, percent, value, name, index }) {
+  if (!percent || percent < 0.015) return null;
+
+  const radius = outerRadius + 22;
+  const angle = (-midAngle * Math.PI) / 180;
+  const x = cx + radius * Math.cos(angle);
+  const y = cy + radius * Math.sin(angle);
+  const anchor = x > cx ? "start" : "end";
+
+  return (
+    <text x={x} y={y} fill={colorAt(index)} textAnchor={anchor} dominantBaseline="central" className="pie-label">
+      {`${name || "未分类"} ${formatNumber(value)}`}
+    </text>
+  );
+}
+
+function CategoryLegend({ rows, valueKey }) {
+  if (!rows?.length) return null;
+
+  return (
+    <div className="category-legend" aria-label="类别索引">
+      {rows.map((row, index) => (
+        <div className="legend-item" key={`${row.category || "未分类"}-${index}`}>
+          <span className="legend-swatch" style={{ backgroundColor: colorAt(index) }} />
+          <span className="legend-index">{index + 1}</span>
+          <span className="legend-name">{row.category || "未分类"}</span>
+          <span className="legend-value">{formatNumber(row[valueKey])}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Overview() {
   const { data, loading, error } = useApi("/api/overview", []);
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
   const summary = data.summary || {};
+  const categoryDistribution = data.category_distribution || [];
   return (
     <>
       <div className="metrics-grid">
@@ -158,30 +221,34 @@ function Overview() {
               <Tooltip />
               <Bar dataKey="learn_count" radius={[0, 4, 4, 0]}>
                 {[...data.popular_courses].reverse().map((_, index) => (
-                  <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                  <Cell key={index} fill={colorAt(index)} />
                 ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>
         <Section title="课程类别交互分布" icon={Activity}>
-          <ResponsiveContainer width="100%" height={340}>
-            <PieChart>
-              <Pie
-                data={data.category_distribution}
-                dataKey="interaction_count"
-                nameKey="category"
-                outerRadius={116}
-                innerRadius={58}
-                label
-              >
-                {data.category_distribution.map((_, index) => (
-                  <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="pie-with-legend">
+            <ResponsiveContainer width="100%" height={340}>
+              <PieChart margin={{ top: 16, right: 88, bottom: 16, left: 88 }}>
+                <Pie
+                  data={categoryDistribution}
+                  dataKey="interaction_count"
+                  nameKey="category"
+                  outerRadius={105}
+                  innerRadius={54}
+                  label={(props) => <PieLabel {...props} />}
+                  labelLine
+                >
+                  {categoryDistribution.map((_, index) => (
+                    <Cell key={index} fill={colorAt(index)} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+            <CategoryLegend rows={categoryDistribution} valueKey="interaction_count" />
+          </div>
         </Section>
       </div>
       <div className="chart-grid">
@@ -323,6 +390,7 @@ function Recommendations() {
 
   if (usersState.loading || coursesState.loading) return <LoadingBlock />;
   if (usersState.error) return <ErrorBlock message={usersState.error} />;
+  const recommendationCategories = categoryRows(items);
 
   return (
     <>
@@ -370,16 +438,27 @@ function Recommendations() {
           </ResponsiveContainer>
         </Section>
         <Section title="推荐课程类别" icon={BookOpen}>
-          <ResponsiveContainer width="100%" height={360}>
-            <PieChart>
-              <Pie data={categoryRows(items)} dataKey="count" nameKey="category" outerRadius={115} innerRadius={56} label>
-                {categoryRows(items).map((_, index) => (
-                  <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="pie-with-legend">
+            <ResponsiveContainer width="100%" height={360}>
+              <PieChart margin={{ top: 16, right: 84, bottom: 16, left: 84 }}>
+                <Pie
+                  data={recommendationCategories}
+                  dataKey="count"
+                  nameKey="category"
+                  outerRadius={104}
+                  innerRadius={54}
+                  label={(props) => <PieLabel {...props} />}
+                  labelLine
+                >
+                  {recommendationCategories.map((_, index) => (
+                    <Cell key={index} fill={colorAt(index)} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+            <CategoryLegend rows={recommendationCategories} valueKey="count" />
+          </div>
         </Section>
       </div>
       <DataTable rows={items} />

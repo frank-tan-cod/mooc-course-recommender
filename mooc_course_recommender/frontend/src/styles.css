@@ -218,6 +218,59 @@ header p {
   font-size: 18px;
 }
 
+.pie-with-legend {
+  display: grid;
+  gap: 10px;
+}
+
+.pie-label {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.category-legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 12px;
+  max-height: 190px;
+  overflow: auto;
+  padding-top: 2px;
+}
+
+.legend-item {
+  display: grid;
+  grid-template-columns: 12px 24px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  color: #4b5870;
+  font-size: 12px;
+}
+
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.legend-index {
+  color: #172033;
+  font-weight: 700;
+}
+
+.legend-name {
+  min-width: 0;
+  overflow: hidden;
+  color: #172033;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legend-value {
+  color: #687589;
+  font-variant-numeric: tabular-nums;
+}
+
 .state-block,
 .error-block,
 .inline-note {
