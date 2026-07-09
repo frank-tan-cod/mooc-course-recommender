@@ -196,26 +196,27 @@ function CategoryLegend({ rows, valueKey }) {
   );
 }
 
-function focusHistogramRows(rows, visibleCount = 6) {
-  const safeRows = rows || [];
+function normalizeHistogramData(histogram) {
+  if (Array.isArray(histogram)) {
+    return {
+      rows: histogram,
+      tail: null,
+    };
+  }
   return {
-    visible: safeRows.slice(0, visibleCount),
-    hidden: safeRows.slice(visibleCount),
+    rows: histogram?.rows || [],
+    tail: histogram?.tail || null,
   };
 }
 
-function HistogramTailNote({ rows }) {
-  if (!rows.length) return null;
-
-  const total = rows.reduce((sum, row) => sum + Number(row.count || 0), 0);
-  const firstRange = rows[0]?.range;
-  const lastRange = rows[rows.length - 1]?.range;
+function HistogramTailNote({ tail }) {
+  if (!tail) return null;
 
   return (
     <div className="tail-note">
-      <span>右侧长尾已从主图隐藏</span>
-      <strong>{formatNumber(total)}</strong>
-      <span>{firstRange === lastRange ? firstRange : `${firstRange} 至 ${lastRange}`}</span>
+      <span>长尾单独列出</span>
+      <strong>{formatNumber(tail.count)}</strong>
+      <span>{tail.range}</span>
     </div>
   );
 }
@@ -227,8 +228,8 @@ function Overview() {
 
   const summary = data.summary || {};
   const categoryDistribution = data.category_distribution || [];
-  const userCourseHistogram = focusHistogramRows(data.user_course_histogram);
-  const courseLearnHistogram = focusHistogramRows(data.course_learn_histogram);
+  const userCourseHistogram = normalizeHistogramData(data.user_course_histogram);
+  const courseLearnHistogram = normalizeHistogramData(data.course_learn_histogram);
   return (
     <>
       <div className="metrics-grid">
@@ -280,27 +281,37 @@ function Overview() {
       <div className="chart-grid">
         <Section title="用户选课数量分布" icon={Activity}>
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={userCourseHistogram.visible}>
+            <BarChart data={userCourseHistogram.rows} margin={{ top: 8, right: 18, bottom: 34, left: 18 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="range" interval={0} tick={{ fontSize: 11 }} />
-              <YAxis />
+              <XAxis
+                dataKey="range"
+                interval={1}
+                tick={{ fontSize: 10 }}
+                label={{ value: "用户选课数量区间（门）", position: "insideBottom", offset: -22 }}
+              />
+              <YAxis label={{ value: "用户数", angle: -90, position: "insideLeft" }} />
               <Tooltip />
               <Bar dataKey="count" fill="#2563eb" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-          <HistogramTailNote rows={userCourseHistogram.hidden} />
+          <HistogramTailNote tail={userCourseHistogram.tail} />
         </Section>
         <Section title="课程被学习次数分布" icon={Activity}>
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={courseLearnHistogram.visible}>
+            <LineChart data={courseLearnHistogram.rows} margin={{ top: 12, right: 24, bottom: 34, left: 18 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="range" interval={0} tick={{ fontSize: 11 }} />
-              <YAxis />
+              <XAxis
+                dataKey="range"
+                interval={1}
+                tick={{ fontSize: 10 }}
+                label={{ value: "课程被学习次数区间（次）", position: "insideBottom", offset: -22 }}
+              />
+              <YAxis label={{ value: "课程数", angle: -90, position: "insideLeft" }} />
               <Tooltip />
-              <Bar dataKey="count" fill="#16a34a" radius={[4, 4, 0, 0]} />
-            </BarChart>
+              <Line type="monotone" dataKey="count" stroke="#16a34a" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+            </LineChart>
           </ResponsiveContainer>
-          <HistogramTailNote rows={courseLearnHistogram.hidden} />
+          <HistogramTailNote tail={courseLearnHistogram.tail} />
         </Section>
       </div>
     </>

@@ -1,8 +1,10 @@
 import os
 import sys
+import math
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -98,6 +100,47 @@ def histogram(df: pd.DataFrame, column: str, bins: int = 12) -> list[dict[str, A
         }
         for interval, count in counts.items()
     ]
+
+
+def focused_histogram(df: pd.DataFrame, column: str, bins: int = 12, quantile: float = 0.99) -> dict[str, Any]:
+    if df.empty or column not in df.columns:
+        return {"rows": [], "tail": None}
+
+    series = pd.to_numeric(df[column], errors="coerce").dropna()
+    if series.empty:
+        return {"rows": [], "tail": None}
+
+    lower = max(0, int(math.floor(series.min())))
+    upper = int(math.ceil(series.quantile(quantile)))
+    upper = max(upper, lower + 1)
+    focused = series[series <= upper]
+    hidden = series[series > upper]
+
+    edge_count = min(bins, max(1, upper - lower)) + 1
+    edges = np.unique(np.linspace(lower, upper, edge_count))
+    counts = pd.cut(focused, bins=edges, include_lowest=True).value_counts().sort_index()
+    rows = []
+    for interval, count in counts.items():
+        left = max(lower, int(math.floor(interval.left)))
+        right = int(math.ceil(interval.right))
+        rows.append(
+            {
+                "range": f"{left}-{right}",
+                "midpoint": round((left + right) / 2, 1),
+                "count": int(count),
+            }
+        )
+
+    tail = None
+    if not hidden.empty:
+        tail = {
+            "range": f"{int(hidden.min())}-{int(hidden.max())}",
+            "count": int(hidden.count()),
+            "min": int(hidden.min()),
+            "max": int(hidden.max()),
+        }
+
+    return {"rows": rows, "tail": tail}
 
 
 def grouped_categories(data: pd.DataFrame, value_col: str) -> list[dict[str, Any]]:
@@ -197,8 +240,8 @@ def overview() -> dict[str, Any]:
         "summary": first_row(summary),
         "popular_courses": records(popular_courses.sort_values("learn_count", ascending=False), 10),
         "category_distribution": grouped_categories(category_distribution, "interaction_count"),
-        "user_course_histogram": histogram(user_course_counts, "course_count"),
-        "course_learn_histogram": histogram(course_learn_counts, "learn_count"),
+        "user_course_histogram": focused_histogram(user_course_counts, "course_count", bins=12, quantile=0.99),
+        "course_learn_histogram": focused_histogram(course_learn_counts, "learn_count", bins=12, quantile=0.99),
     }
 
 
